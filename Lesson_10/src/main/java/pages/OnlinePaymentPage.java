@@ -1,23 +1,19 @@
 import org.openqa.selenium.*;
 import org.openqa.selenium.support.FindBy;
 import org.openqa.selenium.support.PageFactory;
-import org.openqa.selenium.support.ui.WebDriverWait;
 import org.openqa.selenium.support.ui.ExpectedConditions;
-import org.openqa.selenium.support.ui.Select;
-import java.util.regex.Pattern;
-import java.util.regex.Matcher;
-
+import org.openqa.selenium.support.ui.WebDriverWait;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class OnlinePaymentPage {
 
     private final WebDriver driver;
     private final WebDriverWait wait;
-    private final JavascriptExecutor js;
 
-    // Локаторы для блока "Онлайн пополнение без комиссии"
     @FindBy(css = ".pay h2")
     private WebElement paymentBlockTitle;
 
@@ -88,7 +84,7 @@ public class OnlinePaymentPage {
     private WebElement paymentContinueButton;
 
     @FindBy(css = "iframe[src*='widget_v2']")
-    private WebElement iframeLocator;
+    private WebElement iframeElement;
 
     @FindBy(css = "input[formcontrolname='creditCard']")
     private WebElement cardNumberInput;
@@ -102,14 +98,17 @@ public class OnlinePaymentPage {
     @FindBy(css = "input[formcontrolname='holder']")
     private WebElement cardholderNameInput;
 
+    private final Duration DEFAULT_TIMEOUT = Duration.ofSeconds(10);
+
     public OnlinePaymentPage(WebDriver driver) {
         this.driver = driver;
-        this.wait = new WebDriverWait(driver, Duration.ofSeconds(10));
-        this.js = (JavascriptExecutor) driver;
+        this.wait = new WebDriverWait(driver, DEFAULT_TIMEOUT);
         PageFactory.initElements(driver, this);
     }
 
-    // Принять cookie если появились
+    /**
+     * Принять cookie, если они отображаются.
+     */
     public void acceptCookiesIfVisible() {
         try {
             WebDriverWait shortWait = new WebDriverWait(driver, Duration.ofSeconds(3));
@@ -119,80 +118,123 @@ public class OnlinePaymentPage {
                 wait.until(ExpectedConditions.invisibilityOf(cookieBanner));
                 System.out.println("Cookie успешно приняты");
             }
-        } catch (TimeoutException | NoSuchElementException e) {
-            System.out.println("Cookie banner не найден или уже был принят ранее");
+        } catch (TimeoutException | NoSuchElementException ignored) {
+            System.out.println("Cookie banner не найден или уже принят");
         }
     }
 
-    // Получить заголовок блока оплаты
+    /**
+     * Получить заголовок блока оплаты.
+     */
     public String getPaymentBlockTitle() {
         wait.until(ExpectedConditions.visibilityOf(paymentBlockTitle));
         return paymentBlockTitle.getText().trim();
     }
 
-    // Проверить наличие логотипов платежных систем
+    /**
+     * Проверить отображаются ли логотипы платежных систем.
+     */
     public boolean arePaymentSystemLogosDisplayed() {
         wait.until(ExpectedConditions.visibilityOfAllElements(paymentSystemLogos));
-        return !paymentSystemLogos.isEmpty() &&
-                paymentSystemLogos.stream().allMatch(WebElement::isDisplayed);
+        return !paymentSystemLogos.isEmpty() && paymentSystemLogos.stream().allMatch(WebElement::isDisplayed);
     }
 
-    // Получить количество логотипов платежных систем
+    /**
+     * Получить количество логотипов платежных систем.
+     */
     public int getPaymentSystemLogosCount() {
         wait.until(ExpectedConditions.visibilityOfAllElements(paymentSystemLogos));
         return paymentSystemLogos.size();
     }
 
-    // Кликнуть по ссылке "Подробнее о сервисе"
+    /**
+     * Кликнуть по ссылке "Подробнее о сервисе".
+     */
     public void clickMoreInfoLink() {
         wait.until(ExpectedConditions.elementToBeClickable(moreInfoLink));
         moreInfoLink.click();
     }
 
-    // Проверить наличие ссылки "Подробнее о сервисе"
+    /**
+     * Проверить отображение ссылки "Подробнее о сервисе".
+     */
     public boolean isMoreInfoLinkDisplayed() {
         wait.until(ExpectedConditions.visibilityOf(moreInfoLink));
         return moreInfoLink.isDisplayed();
     }
 
-    // Выбрать тип услуги
+    /**
+     * Выбрать тип услуги из выпадающего списка.
+     */
     public void selectServiceType(String serviceType) {
+        wait.until(ExpectedConditions.elementToBeClickable(selectHeaderButton));
+        selectHeaderButton.click();
 
-        try {
-            wait.until(ExpectedConditions.elementToBeClickable(selectHeaderButton));
-            selectHeaderButton.click();
+        By optionsLocator = By.cssSelector(".select__list li");
+        wait.until(ExpectedConditions.visibilityOfElementLocated(optionsLocator));
 
-            By optionsLocator = By.cssSelector(".select__list li");
-            wait.until(ExpectedConditions.visibilityOfElementLocated(optionsLocator));
-            List<WebElement> options = driver.findElements(optionsLocator);
-            boolean clicked = false;
-            for (WebElement option : options) {
-                if (option.getText().trim().equals(serviceType)) {
+        List<WebElement> options = driver.findElements(optionsLocator);
+        boolean clicked = options.stream()
+                .filter(option -> option.getText().trim().equals(serviceType))
+                .findFirst()
+                .map(option -> {
                     option.click();
-                    clicked = true;
-                    break;
-                }
-            }
-
-            if (!clicked) {
-                throw new NoSuchElementException("Элемент \"" + serviceType + "\" не найден");
-            }
-        } catch (Exception e3) {
-            System.out.println("Не удалось выбрать тип услуги: " + serviceType);
-            e3.printStackTrace();
+                    return true;
+                })
+                .orElse(false);
+        if (!clicked) {
+            throw new NoSuchElementException("Элемент \"" + serviceType + "\" не найден");
         }
 
-        // Ждем, пока форма переключится
+        waitForFormSwitch();
+    }
+
+    private void waitForFormSwitch() {
+        // Можно доработать под наши условия появления/исчезновения элементов
         try {
-            Thread.sleep(1000);
+            Thread.sleep(1000); // Рекомендуется заменить на конкретное ожидание при наличии условия
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
     }
 
-    // Получить placeholder для поля телефона в зависимости от типа услуги
+    private WebElement getPhoneInputByServiceType(String serviceType) {
+        switch (serviceType) {
+            case "Услуги связи": return phoneNumberInput;
+            case "Домашний интернет": return internetPhoneInput;
+            default: return null;
+        }
+    }
+
+    private WebElement getSumInputByServiceType(String serviceType) {
+        switch (serviceType) {
+            case "Услуги связи": return sumInput;
+            case "Домашний интернет": return internetSumInput;
+            case "Рассрочка": return instalmentSumInput;
+            case "Задолженность": return arrearsSumInput;
+            default: return null;
+        }
+    }
+
+    private WebElement getEmailInputByServiceType(String serviceType) {
+        switch (serviceType) {
+            case "Услуги связи": return emailInput;
+            case "Домашний интернет": return internetEmailInput;
+            case "Рассрочка": return instalmentEmailInput;
+            case "Задолженность": return arrearsEmailInput;
+            default: return null;
+        }
+    }
+
+    private WebElement getScoreInputByServiceType(String serviceType) {
+        switch (serviceType) {
+            case "Рассрочка": return instalmentScoreInput;
+            case "Задолженность": return arrearsScoreInput;
+            default: return null;
+        }
+    }
+
     public String getPhoneInputPlaceholder(String serviceType) {
-        //selectServiceType(serviceType);
         WebElement phoneInput = getPhoneInputByServiceType(serviceType);
         if (phoneInput != null) {
             wait.until(ExpectedConditions.visibilityOf(phoneInput));
@@ -201,9 +243,7 @@ public class OnlinePaymentPage {
         return "";
     }
 
-    // Получить placeholder для поля суммы в зависимости от типа услуги
     public String getSumInputPlaceholder(String serviceType) {
-        //selectServiceType(serviceType);
         WebElement sumInput = getSumInputByServiceType(serviceType);
         if (sumInput != null) {
             wait.until(ExpectedConditions.visibilityOf(sumInput));
@@ -212,9 +252,7 @@ public class OnlinePaymentPage {
         return "";
     }
 
-    // Получить placeholder для поля email в зависимости от типа услуги
     public String getEmailInputPlaceholder(String serviceType) {
-        //selectServiceType(serviceType);
         WebElement emailInput = getEmailInputByServiceType(serviceType);
         if (emailInput != null) {
             wait.until(ExpectedConditions.visibilityOf(emailInput));
@@ -223,9 +261,7 @@ public class OnlinePaymentPage {
         return "";
     }
 
-    // Получить placeholder для поля номера счета (рассрочка/задолженность)
     public String getScoreInputPlaceholder(String serviceType) {
-        //selectServiceType(serviceType);
         WebElement scoreInput = getScoreInputByServiceType(serviceType);
         if (scoreInput != null) {
             wait.until(ExpectedConditions.visibilityOf(scoreInput));
@@ -234,76 +270,6 @@ public class OnlinePaymentPage {
         return "";
     }
 
-    // Вспомогательные методы для получения элементов по типу услуги
-    private WebElement getPhoneInputByServiceType(String serviceType) {
-        try {
-            switch (serviceType) {
-                case "Услуги связи":
-                    return phoneNumberInput;
-                case "Домашний интернет":
-                    return internetPhoneInput;
-                default:
-                    return null;
-            }
-        } catch (Exception e) {
-            return null;
-        }
-    }
-
-    private WebElement getSumInputByServiceType(String serviceType) {
-        try {
-            switch (serviceType) {
-                case "Услуги связи":
-                    return sumInput;
-                case "Домашний интернет":
-                    return internetSumInput;
-                case "Рассрочка":
-                    return instalmentSumInput;
-                case "Задолженность":
-                    return arrearsSumInput;
-                default:
-                    return null;
-            }
-        } catch (Exception e) {
-            return null;
-        }
-    }
-
-    private WebElement getEmailInputByServiceType(String serviceType) {
-        try {
-            switch (serviceType) {
-                case "Услуги связи":
-                    return emailInput;
-                case "Домашний интернет":
-                    return internetEmailInput;
-                case "Рассрочка":
-                    return instalmentEmailInput;
-                case "Задолженность":
-                    return arrearsEmailInput;
-                default:
-                    return null;
-            }
-        } catch (Exception e) {
-            return null;
-        }
-    }
-
-    private WebElement getScoreInputByServiceType(String serviceType) {
-        try {
-            switch (serviceType) {
-                case "Рассрочка":
-                    return instalmentScoreInput;
-                case "Задолженность":
-                    return arrearsScoreInput;
-                default:
-                    return null;
-            }
-        } catch (Exception e) {
-            return null;
-        }
-    }
-
-    // Заполнить форму "Услуги связи"
     public void fillCommunicationServiceForm(String phoneNumber, String sum, String email) {
         selectServiceType("Услуги связи");
 
@@ -322,13 +288,10 @@ public class OnlinePaymentPage {
         }
     }
 
-    // Кликнуть кнопку "Продолжить" для услуг связи
     public void clickContinueButton() {
-        wait.until(ExpectedConditions.elementToBeClickable(continueButton));
-        continueButton.click();
+        wait.until(ExpectedConditions.elementToBeClickable(continueButton)).click();
     }
 
-    // Проверить активность кнопки "Продолжить"
     public boolean isContinueButtonEnabled() {
         try {
             wait.until(ExpectedConditions.visibilityOf(continueButton));
@@ -338,7 +301,6 @@ public class OnlinePaymentPage {
         }
     }
 
-    // Получить текст кнопки "Продолжить"
     public String getContinueButtonText() {
         try {
             wait.until(ExpectedConditions.visibilityOf(continueButton));
@@ -348,7 +310,6 @@ public class OnlinePaymentPage {
         }
     }
 
-    // Проверить переход на страницу с подробностями о сервисе
     public boolean isOnServiceDetailsPage() {
         try {
             wait.until(ExpectedConditions.urlContains("poryadok-oplaty-i-bezopasnost-internet-platezhey"));
@@ -358,184 +319,159 @@ public class OnlinePaymentPage {
         }
     }
 
-    // Методы для проверки окна оплаты
+    private void switchToIframe() {
+        wait.until(ExpectedConditions.frameToBeAvailableAndSwitchToIt(iframeElement));
+    }
 
-    // Получить отображаемую сумму в окне оплаты
+    private void switchToDefaultContent() {
+        driver.switchTo().defaultContent();
+    }
+
     public String getDisplayedPaymentAmount() {
         try {
-            wait.until(ExpectedConditions.frameToBeAvailableAndSwitchToIt(iframeLocator));
+            switchToIframe();
 
             By amountLocator = By.cssSelector(".pay-description__cost span");
             wait.until(ExpectedConditions.visibilityOfElementLocated(amountLocator));
-            WebElement amountElement = driver.findElement(amountLocator);
-            String amountText = amountElement.getText().trim();
+            String amountText = driver.findElement(amountLocator).getText().trim();
 
-            driver.switchTo().defaultContent();
+            switchToDefaultContent();
             return amountText;
         } catch (Exception e) {
             System.err.println("Ошибка при получении суммы оплаты: " + e.getMessage());
-            try { driver.switchTo().defaultContent(); } catch (Exception ignored) {}
+            switchToDefaultContent();
             return "";
         }
     }
 
-    // Получить отображаемый номер телефона в окне оплаты
     public String getDisplayedPhoneNumber() {
         try {
-            // Переключаемся в iframe с виджетом, если он есть
-            wait.until(ExpectedConditions.frameToBeAvailableAndSwitchToIt(iframeLocator));
+            switchToIframe();
 
-            // Локатор для текста с номером телефона
             By phoneLocator = By.cssSelector(".pay-description__text span");
             wait.until(ExpectedConditions.visibilityOfElementLocated(phoneLocator));
-            WebElement phoneElement = driver.findElement(phoneLocator);
+            String fullText = driver.findElement(phoneLocator).getText().trim();
 
-            String fullText = phoneElement.getText().trim();
-
-            // Извлекаем только номер телефона (числа после "Номер:")
             Pattern pattern = Pattern.compile("Номер:\\s*(\\d+)");
             Matcher matcher = pattern.matcher(fullText);
             String phoneNumber = matcher.find() ? matcher.group(1) : fullText;
 
-            driver.switchTo().defaultContent();
+            switchToDefaultContent();
             return phoneNumber;
         } catch (Exception e) {
             System.err.println("Ошибка при получении номера телефона: " + e.getMessage());
-            try { driver.switchTo().defaultContent(); } catch (Exception ignored) {}
+            switchToDefaultContent();
             return "";
         }
     }
 
-    // Получить текст кнопки "Продолжить" в окне оплаты
     public String getPaymentContinueButtonText() {
         try {
-            // Переключаемся в iframe с виджетом, если он есть
-            wait.until(ExpectedConditions.frameToBeAvailableAndSwitchToIt(iframeLocator));
+            switchToIframe();
 
-            // Ждем видимости кнопки "Продолжить"
             wait.until(ExpectedConditions.visibilityOf(paymentContinueButton));
-            WebElement buttonElement = driver.findElement(By.cssSelector("button.continue, button[data-action='continue'], button[type='submit']"));
-            String buttonText = buttonElement.getText().trim();
+            String buttonText = paymentContinueButton.getText().trim();
 
-            driver.switchTo().defaultContent();
+            switchToDefaultContent();
             return buttonText;
         } catch (Exception e) {
             System.err.println("Не удалось получить текст кнопки оплаты: " + e.getMessage());
-            try {
-                driver.switchTo().defaultContent();
-            } catch (Exception ignored) {
-            }
+            switchToDefaultContent();
             return "";
         }
     }
 
-    public String getPlaceholder(WebElement inputElement) {
-        // Переключаемся в iframe с виджетом, если он есть
-        wait.until(ExpectedConditions.frameToBeAvailableAndSwitchToIt(iframeLocator));
+    private String getPlaceholder(WebElement inputElement) {
+        try {
+            switchToIframe();
 
-        // Ждем, пока появится поле номера карты
-        wait.until(ExpectedConditions.visibilityOf(inputElement));
-        String placeholder = inputElement.getAttribute("placeholder");
+            wait.until(ExpectedConditions.visibilityOf(inputElement));
+            String placeholder = inputElement.getAttribute("placeholder");
 
-        //Подсказка для ввода
-        WebElement labelElement = inputElement.findElement(By.xpath("following-sibling::label"));
-        String labelText = labelElement.getText().trim();
+            WebElement labelElement = inputElement.findElement(By.xpath("following-sibling::label"));
+            String labelText = labelElement.getText().trim();
 
-        driver.switchTo().defaultContent();
-        return labelText + ": '" + placeholder + "'";
+            switchToDefaultContent();
+            return labelText + ": '" + placeholder + "'";
+        } catch (Exception e) {
+            switchToDefaultContent();
+            throw e;
+        }
     }
 
-    // Получить placeholder для поля номера карты
     public String getCardNumberPlaceholder() {
         try {
             return getPlaceholder(cardNumberInput);
         } catch (Exception e) {
             System.err.println("Поле номера карты не найдено: " + e.getMessage());
-            try { driver.switchTo().defaultContent(); } catch (Exception ignored) {}
+            switchToDefaultContent();
             return "Поле номера карты не найдено";
         }
     }
 
-    // Получить placeholder для поля срока действия карты
     public String getCardExpiryPlaceholder() {
         try {
             return getPlaceholder(cardExpiryInput);
         } catch (Exception e) {
             System.err.println("Поле срока действия не найдено: " + e.getMessage());
-            try { driver.switchTo().defaultContent(); } catch (Exception ignored) {}
+            switchToDefaultContent();
             return "Поле срока действия не найдено";
         }
     }
 
-
-    // Получить placeholder для поля CVC карты
     public String getCardCvcPlaceholder() {
         try {
             return getPlaceholder(cardCvcInput);
         } catch (Exception e) {
             System.err.println("Поле CVC не найдено: " + e.getMessage());
-            try { driver.switchTo().defaultContent(); } catch (Exception ignored) {}
+            switchToDefaultContent();
             return "Поле CVC не найдено";
         }
     }
 
-
-    // Получить placeholder для поля имени держателя карты
     public String getCardholderNamePlaceholder() {
         try {
             return getPlaceholder(cardholderNameInput);
         } catch (Exception e) {
             System.err.println("Поле имени держателя не найдено: " + e.getMessage());
-            try { driver.switchTo().defaultContent(); } catch (Exception ignored) {}
+            switchToDefaultContent();
             return "Поле имени держателя не найдено";
         }
     }
 
-    // Проверить наличие логотипов платежных систем в окне оплаты
     public boolean arePaymentWindowLogosDisplayed() {
         try {
-            // Переключаемся в iframe с виджетом, если он есть
-            wait.until(ExpectedConditions.frameToBeAvailableAndSwitchToIt(iframeLocator));
+            switchToIframe();
 
-            // Локатор для логотипов платежных систем (уточните класс по реальной разметке)
             By logosLocator = By.cssSelector(".cards-brands__container img, .cards-brands img");
-
             wait.until(ExpectedConditions.visibilityOfAllElementsLocatedBy(logosLocator));
             List<WebElement> paymentWindowLogos = driver.findElements(logosLocator);
 
-            boolean allDisplayed = !paymentWindowLogos.isEmpty() &&
-                    paymentWindowLogos.stream().allMatch(WebElement::isDisplayed);
+            boolean allDisplayed = !paymentWindowLogos.isEmpty() && paymentWindowLogos.stream().allMatch(WebElement::isDisplayed);
 
-            driver.switchTo().defaultContent();
+            switchToDefaultContent();
             return allDisplayed;
         } catch (Exception e) {
             System.err.println("Ошибка при проверке логотипов платежных систем: " + e.getMessage());
-            try { driver.switchTo().defaultContent(); } catch (Exception ignored) {}
+            switchToDefaultContent();
             return false;
         }
     }
 
-    // Получить количество логотипов платежных систем в окне оплаты
     public int getPaymentWindowLogosCount() {
         try {
-            // Переключаемся в iframe с виджетом, если он есть
-            wait.until(ExpectedConditions.frameToBeAvailableAndSwitchToIt(iframeLocator));
+            switchToIframe();
 
-            // Локатор логотипов платежных систем (уточните селектор по вашей разметке)
             By logosLocator = By.cssSelector(".cards-brands__container img, .cards-brands img");
-
             wait.until(ExpectedConditions.visibilityOfAllElementsLocatedBy(logosLocator));
-            List<WebElement> paymentWindowLogos = driver.findElements(logosLocator);
+            int count = driver.findElements(logosLocator).size();
 
-            int count = paymentWindowLogos.size();
-
-            driver.switchTo().defaultContent();
+            switchToDefaultContent();
             return count;
         } catch (Exception e) {
             System.err.println("Ошибка при подсчёте логотипов платежных систем: " + e.getMessage());
-            try { driver.switchTo().defaultContent(); } catch (Exception ignored) {}
+            switchToDefaultContent();
             return 0;
         }
     }
-
 }
